@@ -420,7 +420,15 @@ def train(train_df: pd.DataFrame, config: TrainConfig) -> PulseModel:
 
     digest = hashlib.sha256(
         json.dumps(
-            {"cfg": config.__dict__, "n": len(train_df), "sk": sklearn.__version__}, sort_keys=True, default=str
+            {
+                "cfg": config.__dict__,
+                "n": len(train_df),
+                "sk": sklearn.__version__,
+                # Fingerprint of the training features, so code changes yield a new version.
+                "data": hashlib.sha256(np.ascontiguousarray(x).tobytes()).hexdigest(),
+            },
+            sort_keys=True,
+            default=str,
         ).encode()
     ).hexdigest()[:8]
     trained_at = datetime.now(timezone.utc)

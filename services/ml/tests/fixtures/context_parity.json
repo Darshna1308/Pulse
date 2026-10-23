@@ -649,9 +649,9 @@
    "client_errors_5m": 4,
    "client_auth_failures_5m": 4,
    "client_distinct_routes_5m": 2,
-   "route_latency_baseline_ms": 38.0,
+   "route_latency_baseline_ms": 30.0,
    "route_request_bytes_baseline": 0.0,
-   "route_response_bytes_baseline": 395.0
+   "route_response_bytes_baseline": 354.0
   },
   {
    "client_requests_1m": 3,
@@ -679,9 +679,9 @@
    "client_errors_5m": 5,
    "client_auth_failures_5m": 5,
    "client_distinct_routes_5m": 2,
-   "route_latency_baseline_ms": 33.0,
-   "route_request_bytes_baseline": 112.0,
-   "route_response_bytes_baseline": 412.0
+   "route_latency_baseline_ms": 31.0,
+   "route_request_bytes_baseline": 109.0,
+   "route_response_bytes_baseline": 359.0
   },
   {
    "client_requests_1m": 3,
@@ -759,9 +759,9 @@
    "client_errors_5m": 12,
    "client_auth_failures_5m": 6,
    "client_distinct_routes_5m": 4,
-   "route_latency_baseline_ms": 33.0,
-   "route_request_bytes_baseline": 118.0,
-   "route_response_bytes_baseline": 395.0
+   "route_latency_baseline_ms": 31.0,
+   "route_request_bytes_baseline": 115.0,
+   "route_response_bytes_baseline": 359.0
   },
   {
    "client_requests_1m": 3,
@@ -769,9 +769,9 @@
    "client_errors_5m": 6,
    "client_auth_failures_5m": 6,
    "client_distinct_routes_5m": 2,
-   "route_latency_baseline_ms": 43.0,
+   "route_latency_baseline_ms": 40.0,
    "route_request_bytes_baseline": 0.0,
-   "route_response_bytes_baseline": 395.0
+   "route_response_bytes_baseline": 354.0
   },
   {
    "client_requests_1m": 3,

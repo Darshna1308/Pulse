@@ -17,8 +17,9 @@ Definitions (timestamps in milliseconds, all windows scoped to one project):
   route_response_bytes_baseline with ts in [t - 24h, t); null when fewer than 5 exist
 
 Medians (not means) keep a burst of extreme events from dragging the baseline toward
-itself. MongoDB computes them with its approximate $median accumulator, so live values
-can differ slightly from the exact medians computed here for small windows.
+itself. The lower median is used because MongoDB's $median accumulator returns an
+actual sample value; for large windows MongoDB's result is approximate, so live values
+can differ slightly from the exact values computed here.
 
 Client windows include the current event, so every count is >= 1.
 """
@@ -90,9 +91,8 @@ def _client_windows(ts: np.ndarray, status: np.ndarray, routes: np.ndarray) -> d
 
 
 def _median(sorted_values: list[float]) -> float:
-    n = len(sorted_values)
-    mid = n // 2
-    return sorted_values[mid] if n % 2 else (sorted_values[mid - 1] + sorted_values[mid]) / 2.0
+    """Lower median (the ceil(n/2)-th smallest value), matching MongoDB's $median on small sets."""
+    return sorted_values[(len(sorted_values) + 1) // 2 - 1]
 
 
 def _route_baselines(ts: np.ndarray, values: list[np.ndarray]) -> list[np.ndarray]:
