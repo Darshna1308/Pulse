@@ -1,0 +1,59 @@
+# Local full stack: MongoDB, ML service, API and web.
+#
+#   cp .env.example .env    # then fill in JWT_ACCESS_SECRET, API_KEY_PEPPER, ML_SERVICE_TOKEN
+#   docker compose up --build
+#   open http://localhost:8080
+#
+# Not intended for public deployment as is: cookies are not Secure because the
+# stack is served over plain HTTP on localhost.
+services:
+  mongo:
+    image: mongo:8.0
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      retries: 10
+
+  ml:
+    build:
+      context: .
+      dockerfile: services/ml/Dockerfile
+    environment:
+      PULSE_ML_INTERNAL_TOKEN: ${ML_SERVICE_TOKEN:?set ML_SERVICE_TOKEN in .env}
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    depends_on:
+      mongo:
+        condition: service_healthy
+      ml:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      MONGODB_URI: mongodb://mongo:27017/pulse
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
+      API_KEY_PEPPER: ${API_KEY_PEPPER:?set API_KEY_PEPPER in .env}
+      ML_SERVICE_URL: http://ml:8000
+      ML_SERVICE_TOKEN: ${ML_SERVICE_TOKEN}
+      CORS_ORIGINS: http://localhost:8080
+      COOKIE_SECURE: "false"
+      TRUST_PROXY: 1
+      ALLOW_DEMO_DATA: ${ALLOW_DEMO_DATA:-true}
+      LOG_LEVEL: info
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    depends_on:
+      - api
+    ports:
+      - "8080:8080"
+
+volumes:
+  mongo-data:
