@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '@/auth/AuthProvider';
-import { ProtectedRoute } from '@/auth/ProtectedRoute';
+import { ProtectedRoute, PublicOnlyRoute } from '@/auth/ProtectedRoute';
 import LoginPage from '@/pages/public/LoginPage';
 import RegisterPage from '@/pages/public/RegisterPage';
 
@@ -72,5 +72,25 @@ describe('auth UI', () => {
     await user.click(screen.getByRole('button', { name: /sign in/i }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Email or password is incorrect.');
     expect(screen.getByLabelText('Password')).toHaveValue('');
+  });
+
+  it('sends new users with ?intent=demo to the demo flow after sign-up', async () => {
+    const session = { user: { id: 'u1', email: 'ada@example.com', name: 'Ada' }, accessToken: 't', accessTokenExpiresIn: 900, csrfToken: 'c' };
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ data: session }), { status: 201 })));
+    renderAt(
+      '/register?intent=demo',
+      <>
+        <Route element={<PublicOnlyRoute />}>
+          <Route path="/register" element={<RegisterPage />} />
+        </Route>
+        <Route path="/app/*" element={<Where />} />
+      </>,
+    );
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText('Name'), 'Ada');
+    await user.type(screen.getByLabelText('Work email'), 'ada@example.com');
+    await user.type(screen.getByLabelText('Password'), 'correct horse 9');
+    await user.click(screen.getByRole('button', { name: /create account/i }));
+    expect(await screen.findByTestId('where')).toHaveTextContent('/app/projects?demo=1');
   });
 });
