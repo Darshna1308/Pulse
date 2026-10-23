@@ -26,7 +26,7 @@ describe('registration', () => {
     expect(res.body.data.user.passwordHash).toBeUndefined();
     expect(res.body.data.accessToken).toEqual(expect.any(String));
 
-    const cookies = ([] as string[]).concat(res.headers['set-cookie']);
+    const cookies = ([] as string[]).concat(res.headers['set-cookie'] ?? []);
     const rt = cookies.find((c) => c.startsWith('pulse_rt='))!;
     expect(rt).toMatch(/HttpOnly/);
     expect(rt).toMatch(/SameSite=Strict/);
@@ -194,7 +194,7 @@ describe('logout and sessions', () => {
       .set('Cookie', `${user.refreshCookie}; pulse_csrf=${user.csrfToken}`)
       .set('X-CSRF-Token', user.csrfToken);
     expect(res.status).toBe(204);
-    expect(([] as string[]).concat(res.headers['set-cookie']).some((c) => c.startsWith('pulse_rt=;'))).toBe(true);
+    expect(([] as string[]).concat(res.headers['set-cookie'] ?? []).some((c) => c.startsWith('pulse_rt=;'))).toBe(true);
     expect((await request(ctx.app).get('/api/v1/auth/me').set(bearer(user))).body.error.code).toBe('session_revoked');
     expect((await refresh(user.refreshCookie, user.csrfToken)).status).toBe(401);
   });
