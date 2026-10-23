@@ -1,0 +1,513 @@
+openapi: 3.0.3
+info:
+  title: Pulse API
+  version: 0.1.0
+  description: |
+    Pulse ingests API request metadata, scores it with an Isolation Forest model and turns
+    anomalies into explainable alerts.
+
+    **Authentication**
+    - Dashboard endpoints use a short-lived JWT access token: `Authorization: Bearer <token>`.
+    - The refresh token lives in an HttpOnly, SameSite=Strict cookie scoped to `/api/v1/auth`.
+      `POST /auth/refresh` and `POST /auth/logout` also require the `X-CSRF-Token` header to
+      equal the `pulse_csrf` cookie (double-submit).
+    - Ingestion uses a project API key in the `X-Pulse-Key` header. Never put keys in URLs.
+
+    **Responses** are `{ "data": ..., "meta"?: ... }` on success and
+    `{ "error": { "code", "message", "details"?, "requestId" } }` on failure.
+
+    **Scores** are `-IsolationForest.score_samples(x)`: higher is more unusual. They are a
+    ranking signal, not a probability of attack.
+servers:
+  - url: /api/v1
+tags:
+  - name: Auth
+  - name: Projects
+  - name: API keys
+  - name: Ingestion
+  - name: Events
+  - name: Alerts
+  - name: Analytics
+  - name: Model
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-Pulse-Key
+    csrf:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+  parameters:
+    projectId:
+      name: projectId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[a-f0-9]{24}$' }
+    page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    pageSize:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    range:
+      name: range
+      in: query
+      schema: { type: string, enum: ['1h', '24h', '7d', '30d'], default: '24h' }
+  responses:
+    Error:
+      description: Error envelope
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string, example: validation_error }
+            message: { type: string }
+            details: {}
+            requestId: { type: string }
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        name: { type: string }
+        createdAt: { type: string, format: date-time }
+    Session:
+      type: object
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        accessToken: { type: string }
+        accessTokenExpiresIn: { type: integer, example: 900 }
+        csrfToken: { type: string }
+    Project:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        environment: { type: string, enum: [production, staging, development] }
+        isDemo: { type: boolean, description: Demo projects contain simulated traffic only }
+        createdAt: { type: string, format: date-time }
+    ApiKey:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        prefix: { type: string, example: pulse_3f9a1c2b7d4e_ }
+        scopes: { type: array, items: { type: string, enum: ['events:write'] } }
+        status: { type: string, enum: [active, revoked] }
+        createdAt: { type: string, format: date-time }
+        lastUsedAt: { type: string, format: date-time, nullable: true }
+        revokedAt: { type: string, format: date-time, nullable: true }
+    IngestEvent:
+      type: object
+      additionalProperties: false
+      required: [timestamp, method, route, statusCode, latencyMs, clientId]
+      properties:
+        id: { type: string, maxLength: 128, description: Optional idempotency key. Repeats are not stored twice. }
+        timestamp: { type: string, format: date-time, description: 'Within the last 30 days, at most 5 minutes in the future' }
+        method: { type: string, enum: [GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS] }
+        route: { type: string, example: '/v1/orders/{id}', description: Path template. Query strings are rejected. }
+        statusCode: { type: integer, minimum: 100, maximum: 599 }
+        latencyMs: { type: number, minimum: 0 }
+        requestBytes: { type: integer, minimum: 0, default: 0 }
+        responseBytes: { type: integer, minimum: 0, default: 0 }
+        clientId: { type: string, maxLength: 128, description: Pseudonymous client identifier. Do not send emails or IPs. }
+    Evidence:
+      type: object
+      description: Observed fact computed from the event, compared with the training baseline.
+      properties:
+        metric: { type: string }
+        label: { type: string }
+        unit: { type: string }
+        value: { type: number, nullable: true }
+        baseline_median: { type: number, nullable: true }
+        baseline_p99: { type: number, nullable: true }
+        summary: { type: string }
+    Prediction:
+      type: object
+      properties:
+        score: { type: number, description: Isolation Forest anomaly score (higher is more unusual) }
+        isAnomaly: { type: boolean }
+        severity: { type: string, enum: [medium, high, critical], nullable: true }
+        percentile: { type: number, description: Rank among training events (0-100) }
+        detectedBy: { type: array, items: { type: string, enum: [model, guardrail] } }
+        modelVersion: { type: string }
+        threshold: { type: number }
+    Event:
+      type: object
+      properties:
+        id: { type: string }
+        timestamp: { type: string, format: date-time }
+        method: { type: string }
+        route: { type: string }
+        statusCode: { type: integer }
+        latencyMs: { type: number }
+        clientId: { type: string }
+        source: { type: string, enum: [api_key, demo] }
+        processing:
+          type: object
+          properties:
+            status: { type: string, enum: [pending, scored, failed] }
+            error: { type: string, nullable: true }
+        prediction: { $ref: '#/components/schemas/Prediction' }
+        alertId: { type: string, nullable: true }
+    Alert:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [open, investigating, resolved, dismissed] }
+        severity: { type: string, enum: [medium, high, critical] }
+        title: { type: string }
+        patternCode: { type: string }
+        clientId: { type: string }
+        score: { type: number }
+        threshold: { type: number }
+        detectedBy: { type: array, items: { type: string } }
+        evidence: { type: array, items: { $ref: '#/components/schemas/Evidence' } }
+        attributions:
+          type: array
+          items:
+            type: object
+            properties:
+              feature: { type: string }
+              label: { type: string }
+              contribution: { type: number, description: Score drop when the feature is reset to its training median }
+        eventCount: { type: integer }
+        firstSeenAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time }
+        statusHistory: { type: array, items: { type: object } }
+security:
+  - bearer: []
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Create an account and start a session
+      description: Password must be 10-128 characters with at least one letter and one number. Rate limited.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 10 }
+                name: { type: string }
+      responses:
+        '201': { description: Created. Sets pulse_rt and pulse_csrf cookies., content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Session' } } } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /auth/login:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Sign in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        '200': { description: Signed in, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Session' } } } } } }
+        '401': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      security: [{ csrf: [] }]
+      summary: Rotate the refresh token and issue a new access token
+      description: Requires the pulse_rt cookie and X-CSRF-Token. Presenting a previously rotated token revokes the session (reuse detection).
+      responses:
+        '200': { description: New session tokens }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      security: [{ csrf: [] }]
+      summary: Revoke the current session and clear cookies
+      responses:
+        '204': { description: Signed out }
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user
+      responses:
+        '200': { description: The signed-in user }
+        '401': { $ref: '#/components/responses/Error' }
+  /auth/sessions:
+    get:
+      tags: [Auth]
+      summary: Active sessions for the current user
+      responses:
+        '200': { description: Sessions, with `current` marking this one }
+  /auth/sessions/{sessionId}:
+    delete:
+      tags: [Auth]
+      summary: Revoke one of your sessions
+      parameters:
+        - { name: sessionId, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Revoked }
+        '404': { $ref: '#/components/responses/Error' }
+  /auth/sessions/revoke-others:
+    post:
+      tags: [Auth]
+      summary: Sign out every other session
+      responses:
+        '200': { description: Number of sessions revoked }
+  /auth/password:
+    post:
+      tags: [Auth]
+      summary: Change password (revokes your other sessions)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string }
+      responses:
+        '200': { description: Changed }
+        '401': { $ref: '#/components/responses/Error' }
+  /projects:
+    get:
+      tags: [Projects]
+      summary: List your projects with event and alert counts
+      responses:
+        '200': { description: Projects }
+    post:
+      tags: [Projects]
+      summary: Create a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                environment: { type: string, enum: [production, staging, development] }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Project' } } } } } }
+  /projects/demo:
+    post:
+      tags: [Projects]
+      summary: Create a separate demo project filled with simulated traffic
+      description: Disabled when ALLOW_DEMO_DATA is false (default in production). One demo project per user. Events go through the real scoring pipeline.
+      responses:
+        '201': { description: Demo project and ingestion totals }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /projects/{projectId}:
+    parameters: [{ $ref: '#/components/parameters/projectId' }]
+    get:
+      tags: [Projects]
+      summary: Get a project (404 if it is not yours)
+      responses:
+        '200': { description: Project }
+        '404': { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [Projects]
+      summary: Update name, description or environment
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [Projects]
+      summary: Delete the project with its events, alerts and keys
+      responses:
+        '204': { description: Deleted }
+  /projects/{projectId}/keys:
+    parameters: [{ $ref: '#/components/parameters/projectId' }]
+    get:
+      tags: [API keys]
+      summary: List key metadata (never the secret)
+      responses:
+        '200': { description: Keys, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/ApiKey' } } } } } } }
+    post:
+      tags: [API keys]
+      summary: Create a key. The full key is returned once.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [name], properties: { name: { type: string } } }
+      responses:
+        '201': { description: '`data.key` holds the full key; store it now' }
+  /projects/{projectId}/keys/{keyId}:
+    parameters:
+      - { $ref: '#/components/parameters/projectId' }
+      - { name: keyId, in: path, required: true, schema: { type: string } }
+    delete:
+      tags: [API keys]
+      summary: Revoke a key (metadata is kept)
+      responses:
+        '200': { description: Revoked key metadata }
+  /ingest/events:
+    post:
+      tags: [Ingestion]
+      security: [{ apiKey: [] }]
+      summary: Ingest one event or a batch of up to 100
+      description: |
+        Unknown fields are rejected so headers, bodies or credentials cannot be stored.
+        Events are stored, enriched with windowed context, scored by the ML service and
+        grouped into alerts. Rate limited per key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/IngestEvent'
+                - type: object
+                  required: [events]
+                  properties:
+                    events: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/IngestEvent' } }
+      responses:
+        '201': { description: Stored and scored }
+        '200': { description: All events were duplicates (idempotency) }
+        '202': { description: Stored, but the ML service was unavailable. Events are marked failed and can be reprocessed. }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /projects/{projectId}/events:
+    parameters: [{ $ref: '#/components/parameters/projectId' }]
+    get:
+      tags: [Events]
+      summary: List events with filters and pagination
+      parameters:
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/pageSize' }
+        - { name: method, in: query, schema: { type: string } }
+        - { name: statusClass, in: query, schema: { type: string, enum: ['2xx', '3xx', '4xx', '5xx'] } }
+        - { name: route, in: query, schema: { type: string }, description: Case-insensitive substring }
+        - { name: clientId, in: query, schema: { type: string } }
+        - { name: anomaly, in: query, schema: { type: string, enum: ['true', 'false'] } }
+        - { name: processing, in: query, schema: { type: string, enum: [pending, scored, failed] } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+      responses:
+        '200': { description: Events, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Event' } }, meta: { type: object } } } } } }
+  /projects/{projectId}/events/{eventId}:
+    parameters:
+      - { $ref: '#/components/parameters/projectId' }
+      - { name: eventId, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Events]
+      summary: One event with its context, prediction and alert
+      responses:
+        '200': { description: Event }
+  /projects/{projectId}/events/reprocess:
+    parameters: [{ $ref: '#/components/parameters/projectId' }]
+    post:
+      tags: [Events]
+      summary: Retry scoring for events that failed (up to 500)
+      responses:
+        '200': { description: Reprocessed }
+        '202': { description: ML service still unavailable }
+  /projects/{projectId}/alerts:
+    parameters: [{ $ref: '#/components/parameters/projectId' }]
+    get:
+      tags: [Alerts]
+      summary: List alerts
+      parameters:
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/pageSize' }
+        - { name: status, in: query, schema: { type: string, enum: [open, investigating, resolved, dismissed, active] } }
+        - { name: severity, in: query, schema: { type: string, enum: [medium, high, critical] } }
+      responses:
+        '200': { description: Alerts }
+  /projects/{projectId}/alerts/{alertId}:
+    parameters:
+      - { $ref: '#/components/parameters/projectId' }
+      - { name: alertId, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Alerts]
+      summary: Alert with evidence, attributions, history and up to 50 related events
+      responses:
+        '200': { description: Alert detail, content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { alert: { $ref: '#/components/schemas/Alert' }, events: { type: array, items: { $ref: '#/components/schemas/Event' } } } } } } } } }
+    patch:
+      tags: [Alerts]
+      summary: Change alert status
+      description: 'Transitions: open → investigating/resolved/dismissed; investigating → open/resolved/dismissed; resolved/dismissed → open. A note is required to resolve or dismiss.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [open, investigating, resolved, dismissed] }
+                note: { type: string, maxLength: 1000 }
+      responses:
+        '200': { description: Updated alert }
+        '400': { $ref: '#/components/responses/Error' }
+  /projects/{projectId}/analytics/overview:
+    parameters: [{ $ref: '#/components/parameters/projectId' }, { $ref: '#/components/parameters/range' }]
+    get:
+      tags: [Analytics]
+      summary: Totals, latency percentiles, time series, status mix, top endpoints and clients
+      responses:
+        '200': { description: Overview metrics }
+  /projects/{projectId}/analytics/scores:
+    parameters: [{ $ref: '#/components/parameters/projectId' }, { $ref: '#/components/parameters/range' }]
+    get:
+      tags: [Analytics]
+      summary: Histogram of stored anomaly scores
+      responses:
+        '200': { description: Buckets }
+  /ml/status:
+    get:
+      tags: [Model]
+      summary: ML service health
+      responses:
+        '200': { description: Status }
+  /ml/model:
+    get:
+      tags: [Model]
+      summary: Model metadata, features, threshold and versions seen in predictions
+      responses:
+        '200': { description: Model info }
+        '503': { $ref: '#/components/responses/Error' }
+  /ml/evaluation:
+    get:
+      tags: [Model]
+      summary: Latest evaluation report for the current model (data is null if none has been run)
+      responses:
+        '200': { description: Report or null }
+    post:
+      tags: [Model]
+      summary: Run the evaluation on the labelled synthetic dataset (takes several seconds)
+      responses:
+        '200': { description: Fresh report }
+        '429': { $ref: '#/components/responses/Error' }

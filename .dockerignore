@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/coverage
+**/*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.git
+docs/screenshots
+services/ml/models/*.joblib
+services/ml/models/*.json
