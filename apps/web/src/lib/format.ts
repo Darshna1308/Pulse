@@ -58,3 +58,6 @@ export function describeUserAgent(ua: string | null) {
   const os = /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'macOS' : /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS' : /Linux/.test(ua) ? 'Linux' : '';
   return os ? `${browser} on ${os}` : browser;
 }
+
+/** "1 event", "3 events". */
+export const plural = (n: number, word: string, many = `${word}s`) => `${fmtNumber(n)} ${n === 1 ? word : many}`;

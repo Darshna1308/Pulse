@@ -17,7 +17,7 @@ import { InfoTip } from '@/components/ui/Misc';
 import { Modal } from '@/components/ui/Modal';
 import { EmptyState, ErrorState, InlineError, Skeleton } from '@/components/ui/States';
 import { useToast } from '@/components/ui/Toast';
-import { fmtDateTime, fmtEvidenceValue, fmtMs, fmtNumber, fmtRelative, fmtScore } from '@/lib/format';
+import { fmtDateTime, fmtEvidenceValue, fmtMs, fmtNumber, fmtRelative, fmtScore, plural } from '@/lib/format';
 
 const ACTIONS: Record<AlertStatus, { to: AlertStatus; label: string; icon: typeof Eye; variant: 'primary' | 'secondary' | 'danger' }[]> = {
   open: [
@@ -153,7 +153,7 @@ function AlertDetail({ projectId }: { projectId: string }) {
             <SeverityBadge severity={alert.severity} />
             <AlertStatusBadge status={alert.status} />
             <span>
-              {fmtNumber(alert.eventCount)} events from <span className="font-mono text-ink-2">{alert.clientId}</span> · last seen {fmtRelative(alert.lastSeenAt)}
+              {plural(alert.eventCount, 'event')} from <span className="font-mono text-ink-2">{alert.clientId}</span> · last seen {fmtRelative(alert.lastSeenAt)}
             </span>
           </span>
         }
@@ -216,7 +216,7 @@ function AlertDetail({ projectId }: { projectId: string }) {
           </Card>
 
           <Card>
-            <CardHeader title="Related events" description={`${Math.min(events.length, 50)} of ${fmtNumber(alert.eventCount)} grouped events, oldest first. Click one for its context.`} />
+            <CardHeader title="Related events" description={`${Math.min(events.length, 50)} of ${fmtNumber(alert.eventCount)} grouped ${alert.eventCount === 1 ? 'event' : 'events'}, oldest first. Click one for its context.`} />
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] text-left text-[13px]">
                 <thead>

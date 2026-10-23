@@ -17,7 +17,7 @@ import { Segmented } from '@/components/ui/Misc';
 import { StatTile } from '@/components/ui/StatTile';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States';
 import { useToast } from '@/components/ui/Toast';
-import { fmtMs, fmtNumber, fmtPercent, fmtRelative, fmtScore } from '@/lib/format';
+import { fmtMs, fmtNumber, fmtPercent, fmtRelative, fmtScore, plural } from '@/lib/format';
 import { useProject } from '@/lib/useProject';
 
 export const RANGE_OPTIONS: { value: RangeKey; label: string }[] = [
@@ -219,7 +219,7 @@ function Overview({ projectId }: { projectId: string }) {
                           <div className="mt-1 flex items-center gap-2 text-xs text-ink-3">
                             <span className="truncate font-mono">{a.clientId}</span>
                             <span>·</span>
-                            <span>{a.eventCount} events</span>
+                            <span>{plural(a.eventCount, 'event')}</span>
                             <span>·</span>
                             <span>{fmtRelative(a.lastSeenAt)}</span>
                           </div>

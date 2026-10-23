@@ -33,7 +33,7 @@ export function TrafficChart({ data }: { data: Overview }) {
   return (
     <div className="h-64" role="img" aria-label="Requests over time, split into successful and error responses">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={rows} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+        <AreaChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="reqFill" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stopColor={CHART.requests} stopOpacity={0.22} />
@@ -69,7 +69,7 @@ export function AnomalyBars({ data }: { data: Overview }) {
   return (
     <div className="h-28" role="img" aria-label="Anomalous events per time bucket">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data.series} margin={{ top: 4, right: 8, left: -12, bottom: 0 }} barCategoryGap={2}>
+        <BarChart data={data.series} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barCategoryGap={2}>
           <CartesianGrid stroke={CHART.grid} vertical={false} />
           <XAxis dataKey="bucket" hide />
           <YAxis allowDecimals={false} width={48} {...axisProps} />
@@ -117,7 +117,7 @@ export function ScoreHistogram({ buckets, threshold }: { buckets: ScoreBucket[];
   return (
     <div className="h-56" role="img" aria-label="Distribution of anomaly scores; flagged events highlighted">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={rows} margin={{ top: 8, right: 8, left: -12, bottom: 0 }} barCategoryGap={2}>
+        <BarChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap={2}>
           <CartesianGrid stroke={CHART.grid} vertical={false} />
           <XAxis dataKey="label" interval={0} angle={-30} textAnchor="end" height={44} {...axisProps} fontSize={10} />
           <YAxis allowDecimals={false} tickFormatter={(v) => fmtNumber(v)} width={48} {...axisProps} />

@@ -257,7 +257,7 @@ export default function AnalyticsPage() {
               }
               description={
                 report
-                  ? `Run ${fmtDateTime(report.evaluated_at)} · ${fmtNumber(report.dataset.events)} events (${fmtPercent(report.dataset.anomaly_rate)} injected), seed ${report.dataset.seed}, ${report.dataset.overlap_with_training}.`
+                  ? `Run ${fmtDateTime(report.evaluated_at)} · ${fmtNumber(report.dataset.events)} events (${fmtPercent(report.dataset.anomaly_rate)} injected), seed ${report.dataset.seed}. Overlap with training data: ${report.dataset.overlap_with_training}.`
                   : 'Metrics appear only after the evaluation script has actually run against the current model.'
               }
             />

@@ -58,6 +58,8 @@ export function LiveStream() {
     setBurst(inBurst);
     if (tick % 40 === 32) setIncident((i) => (i + 1) % INCIDENTS.length);
     setPoints((prev) => {
+      // StrictMode re-runs effects in development; add each tick's points once.
+      if (prev.some((p) => p.id === tick * 10)) return prev;
       const next = prev.filter((p) => p.t > tick - WINDOW);
       const n = inBurst ? 5 : 2;
       for (let k = 0; k < n; k++) {
